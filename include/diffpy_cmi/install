@@ -1,0 +1,567 @@
+#!/bin/sh
+# vim: ft=zsh
+
+DOC="
+DiffPy-CMI installation utility
+usage: ./install [options]
+
+Options:
+
+  -n, --dry-run   list what would be done without making any changes.
+                  Display a list of steps when run with --update, --build
+                  or --clean.
+
+  --update[=steps]  perform all or selected software updates from online
+                  source repositories.  Update steps are comma separated
+                  integers or ranges such as '1,3,5-6'.  Use option -n to
+                  display the steps.
+
+  --build[=steps]   rebuild all or specified packages from sources in the
+                  src folder.  Use option -n to display the build steps.
+
+  --clean[=steps]   remove generated files from the source folders of the
+                  specified packages.  This ensures that --build is run
+                  from a pristine state.
+
+  -h, --help      display this message and exit
+"
+
+# Environment overridable variables
+
+: ${PYTHON:=python}     # python executable to install for
+: ${SCONS:=scons}       # path to scons, the software building tool
+
+# Re-launch using zsh --------------------------------------------------------
+
+if test -z "$ZSH_VERSION"; then
+    ZSH=/bin/zsh
+    if ! test -x "$ZSH"; then
+        ZSH=zsh
+    fi
+    if ! type "$ZSH" >/dev/null 2>&1; then
+        echo "This script requires Z shell.  Please install zsh using either of"
+        echo
+        echo '  sudo apt-get install zsh'
+        echo
+        echo '  sudo yum install zsh'
+        echo
+        exit 2
+    fi
+    # Mac OS X 10.7 (Lion) is misconfigured to reset PATH for "zsh -f"
+    # Save the original value so it can be restored in zsh.
+    export PATH_NwldpJ="$PATH"
+    exec $ZSH -f "$0" "$@"
+fi
+
+# running with zsh here
+
+emulate zsh
+umask 022
+setopt extendedglob
+
+# restore the saved PATH and remove any duplicate entries.
+PATH="${PATH_NwldpJ}:${PATH}"
+# remove blank and duplicate entries from the PATH
+typeset -U path
+path=( $path )
+
+# Constants ------------------------------------------------------------------
+
+DOC=${${DOC##[[:space:]]##}%%[[:space:]]##}
+
+BASEDIR=$(cd ${0:h} && pwd -P)
+SRCDIR=${BASEDIR}/src
+PTHFILE=${BASEDIR}/diffpy_cmi.pth
+VERSION=$(cd $BASEDIR && test -s VERSION.txt && <VERSION.txt)
+
+typeset -aU clean_selection build_selection update_selection
+clean_selection=( )
+build_selection=( )
+update_selection=( )
+HASHLINE=${(l:78::#:):-}
+DASHLINE=${(l:78::-:):-}
+
+BASEDIRSHORT=${BASEDIR/(#b)(#s)(${HOME})(\/#*)/\~${match[2]}}
+FINALINFO="\
+$HASHLINE
+Installation completed.
+$HASHLINE
+
+To test if all installed packages work, execute
+
+    ./runtests.sh
+
+If you plan to use the C++ libraries, consider adding the following lines
+to your shell startup file (.profile, .bashrc, or .zshenv):
+
+export CPATH=${BASEDIRSHORT}/include:\$CPATH
+export LIBRARY_PATH=${BASEDIRSHORT}/lib:\$LIBRARY_PATH
+"
+
+# Extract command-line options -----------------------------------------------
+
+zmodload zsh/zutil
+zparseopts -D -E \
+    n=opt_dryrun -dry-run=opt_dryrun \
+    h=opt_help -help=opt_help \
+    -clean::=opt_clean -update::=opt_update -build::=opt_build ||
+    exit $?
+
+if [[ -n $* ]]; then
+    print -u2 "Invalid option: $*"
+    exit 2
+fi
+
+if [[ -n ${opt_help} ]]; then
+    print -r -- $DOC
+    exit
+fi
+
+# Functions ------------------------------------------------------------------
+
+expand_ranges() {
+    local ARRAYNAME=${1?}
+    shift
+    local -aU acontent
+    local n
+    acontent=( ${=${argv//,/\ }} )
+    for n in ${acontent}; do
+        if [[ $n == [[:digit:]]##-[[:digit:]]## ]]; then
+            acontent[(i)$n]=( {${n%%-*}..${n##*-}} )
+        elif [[ $n == [[:digit:]]## ]]; then
+            continue
+        elif [[ $n == all ]]; then
+            acontent[(i)$n]=( {1..50} )
+        else
+            print -u2 "Invalid range value '$n'."
+            exit 2
+        fi
+    done
+    set -A ${ARRAYNAME} $acontent
+}
+
+
+expand_tilde() {
+    setopt localoptions
+    setopt nonomatch noglob
+    if [[ ${(P)${1?}} == (#b)([~][^/]#)(*) ]]; then
+        typeset -g $1=${~match[1]}${match[2]}
+    fi
+}
+
+
+do_license() {
+    if [[ -n ${opt_dryrun} ]]; then
+        return
+    fi
+    if [[ -f ${BASEDIR}/.license.agreed ]]; then
+        return
+    fi
+    print
+    print "Press <space> to display the license."
+    read -sk1
+    more ${BASEDIR}/LICENSE.txt
+    print
+    print -- $HASHLINE
+    read -q "?Do you agree with the license terms? (y/n) "
+    print
+    print -- $HASHLINE
+    if [[ $REPLY != [yY] ]]; then
+        exit 1
+    fi
+    touch ${BASEDIR}/.license.agreed
+}
+
+
+python_easy_install() {
+    local eicode='if True:
+        import sys
+        from setuptools.command.easy_install import main
+        sys.argv[0] = "easy_install"
+        main()
+    '
+    ${PYTHON} -c "$eicode" "$@"
+}
+
+
+adjust_build_environment() {
+    # tie path variables to unique arrays of the lower-case name
+    typeset -TUx CPATH cpath
+    typeset -TUx CPLUS_INCLUDE_PATH cplus_include_path
+    typeset -TUx LIBRARY_PATH library_path
+    typeset -TUx LD_LIBRARY_PATH ld_library_path
+    typeset -TUx PYTHONPATH pythonpath
+    if [[ ${(L)OSTYPE} == darwin* ]]; then
+        adjust_macosx_environment
+    fi
+    BINDIR=${BASEDIR}/bin
+    INCLUDEDIR=${BASEDIR}/include
+    LIBDIR=${BASEDIR}/lib
+    PYTHON_VERSION=$($PYTHON -c \
+        'import sys; print "%s.%s" % sys.version_info[:2]')
+    PYTHONDIR=$LIBDIR/python${PYTHON_VERSION}/site-packages
+    : ${NCPU:=$(${PYTHON} -c \
+        'from multiprocessing import cpu_count; print min(4, cpu_count())')}
+    cpath=( $BASEDIR/include $cpath )
+    library_path=( ${BASEDIR}/lib $library_path )
+    ld_library_path=( ${BASEDIR}/lib $ld_library_path )
+    pythonpath=( $PYTHONDIR $pythonpath )
+}
+
+adjust_macosx_environment() {
+    local compilerpaths
+    compilerpaths=( ${(f)"$(${CXX:-c++} -E -x c++ - -v </dev/null 2>&1)"} )
+    compilerpaths=( ${(M)compilerpaths:#[ ]*} )
+    compilerpaths=( ${${compilerpaths##[[:blank:]]##}%%[[:blank:]]*} )
+    compilerpaths=( ${^compilerpaths}(N-/) )
+    local PORTDIR=${$(whence -p port):h:h}
+    local cxxhasboost
+    cxxhasboost=( ${^compilerpaths}/boost(N-/) )
+    if [[ -z $cxxhasboost && -d ${PORTDIR}/include/boost ]]; then
+        print "WARNING: Adjusting CPATH to include MacPorts header files."
+        cpath=( $PORTDIR/include $cpath )
+        print -r "CPATH=${(q)CPATH}"
+        print
+        local plib=${PORTDIR}/lib
+        if [[ -d $plib && -z ${(M)library_path:#${plib}} ]]; then
+            print "WARNING: Adjusting LIBRARY_PATH to include MacPorts libraries."
+            library_path=( $plib $library_path )
+            print -r "LIBRARY_PATH=${(q)LIBRARY_PATH}"
+            print
+        fi
+    fi
+}
+
+
+integer CIDX=0
+integer UIDX=0
+integer BIDX=0
+
+ListSkipOrDo() {
+    local selection
+    local idx
+    typeset -gA didheader
+    case $1 in
+        (clean)
+            idx=$(( ++CIDX ))
+            selection=( $clean_selection )
+            ;;
+        (build)
+            idx=$(( ++BIDX ))
+            selection=( $build_selection )
+            ;;
+        (update)
+            idx=$(( ++UIDX ))
+            selection=( $update_selection )
+            ;;
+        (*)
+            print -u2 "Invalid argument $1"
+            exit 2
+    esac
+    local name=${2?}
+    if [[ -z ${(M)selection:#${idx}} ]]; then
+        return 0
+    fi
+    if [[ -n ${opt_dryrun} ]]; then
+        if [[ -z ${didheader[$1]} ]]; then
+            didheader[$1]=1
+            print "\n[dry run] - ignored $1 steps:"
+        fi
+        print "  $idx $name"
+        return 0
+    fi
+    local sepline="# $idx $name ${(l:80::-:):-}"
+    [[ -z ${didheader[$1]} ]] || print
+    didheader[$1]=1
+    print ${sepline[1,78]}
+    # return false status to trigger the build section
+    return 1
+}
+
+
+do_clean() {
+    local PS4=">> "
+    local msg_noupdate
+    MSG_NOCLEAN="No cleanup needed for this package.  Skipped."
+    ListSkipOrDo clean "src/pycifrw (N/A)" || {
+        print $MSG_NOCLEAN
+    } || return $?
+    ListSkipOrDo clean "src/diffpy.Structure" || (
+        setopt xtrace
+        cd $SRCDIR/diffpy.Structure &&
+            rm -rf build temp diffpy.Structure.egg-info
+    ) || return $?
+    ListSkipOrDo clean "src/diffpy.utils" || (
+        setopt xtrace
+        cd $SRCDIR/diffpy.utils &&
+            rm -rf build temp diffpy.utils.egg-info
+    ) || return $?
+    ListSkipOrDo clean "src/periodictable (N/A)" || {
+        print $MSG_NOCLEAN
+    } || return $?
+    ListSkipOrDo clean "src/libobjcryst" || (
+        setopt xtrace
+        cd $SRCDIR/libobjcryst && $SCONS --clean
+    ) || return $?
+    ListSkipOrDo clean "src/pyobjcryst" || (
+        setopt xtrace
+        cd $SRCDIR/pyobjcryst &&
+            rm -rf build temp pyobjcryst.egg-info
+    ) || return $?
+    ListSkipOrDo clean "src/libdiffpy" || (
+        setopt xtrace
+        cd $SRCDIR/libdiffpy && $SCONS --clean
+    ) || return $?
+    ListSkipOrDo clean "src/diffpy.srreal" || (
+        setopt xtrace
+        cd $SRCDIR/diffpy.srreal &&
+            rm -rf build temp diffpy.srreal.egg-info
+    ) || return $?
+    ListSkipOrDo clean "src/diffpy.srfit" || (
+        setopt xtrace
+        cd $SRCDIR/diffpy.srfit &&
+            rm -rf build temp diffpy.srreal.egg-info
+    ) || return $?
+    ListSkipOrDo clean "src/srfit-sasview (N/A)" || {
+        print $MSG_NOCLEAN
+    } || return $?
+}
+
+
+do_update() {
+    local PS4=">> "
+    local msg_noupdate
+    MSG_NOUPDATE="Update of this package is not supported.  Skipped."
+    ListSkipOrDo update "src/pycifrw (N/A)" || {
+        print $MSG_NOUPDATE
+    } || return $?
+    ListSkipOrDo update "src/diffpy.Structure" || (
+        setopt xtrace
+        cd $SRCDIR/diffpy.Structure && git pull origin
+    ) || return $?
+    ListSkipOrDo update "src/diffpy.utils" || (
+        setopt xtrace
+        cd $SRCDIR/diffpy.utils && git pull origin
+    ) || return $?
+    ListSkipOrDo update "src/periodictable (N/A)" || {
+        print $MSG_NOUPDATE
+    } || return $?
+    ListSkipOrDo update "src/libobjcryst" || (
+        setopt xtrace
+        cd $SRCDIR/libobjcryst && git pull origin
+    ) || return $?
+    ListSkipOrDo update "src/pyobjcryst" || (
+        setopt xtrace
+        cd $SRCDIR/pyobjcryst && git pull origin
+    ) || return $?
+    ListSkipOrDo update "src/libdiffpy" || (
+        setopt xtrace
+        cd $SRCDIR/libdiffpy && git pull origin
+    ) || return $?
+    ListSkipOrDo update "src/diffpy.srreal" || (
+        setopt xtrace
+        cd $SRCDIR/diffpy.srreal && git pull origin
+    ) || return $?
+    ListSkipOrDo update "src/diffpy.srfit" || (
+        setopt xtrace
+        cd $SRCDIR/diffpy.srfit && git pull origin
+    ) || return $?
+    ListSkipOrDo update "src/srfit-sasview (N/A)" || {
+        print $MSG_NOUPDATE
+    } || return $?
+}
+
+
+do_build() {
+    adjust_build_environment
+
+    if [[ -z ${opt_dryrun} && -n ${build_selection} ]]; then
+        mkdir -p ${BINDIR?} ${INCLUDEDIR?} ${LIBDIR?} ${PYTHONDIR?} || exit $?
+        # x86_64 fedora wants to install to lib64 - in such case create symbolic
+        # link lib64 that points to lib
+        local binlibdest=$($PYTHON -c \
+            "import distutils.sysconfig; \
+            print distutils.sysconfig.get_config_var('BINLIBDEST')")
+        cd ${LIBDIR:h}
+        if [[ ${binlibdest:h:h:t} == lib64 && ! lib64 -ef ${LIBDIR:t} ]]; then
+            rm -f lib64 && ln -svf "${LIBDIR:t}" lib64 || exit $?
+        fi
+    fi
+
+    ListSkipOrDo build "PyCifRW" || {
+        python_easy_install -N --zip-ok --prefix=$BASEDIR \
+            ${SRCDIR}/pycifrw/PyCifRW-*.tar.gz(om[1])
+    } || return $?
+    ListSkipOrDo build "diffpy.Structure" || {
+        python_easy_install -ZN --prefix=$BASEDIR ${SRCDIR}/diffpy.Structure
+    } || return $?
+    ListSkipOrDo build "diffpy.utils" || {
+        python_easy_install -ZN --prefix=$BASEDIR ${SRCDIR}/diffpy.utils
+    } || return $?
+    ListSkipOrDo build "periodictable" || {
+        python_easy_install -ZN --prefix=$BASEDIR \
+            ${SRCDIR}/periodictable/periodictable-*.tar.gz(om[1])
+    } || return $?
+    ListSkipOrDo build "libObjCryst" || {
+        cd $SRCDIR/libobjcryst
+        $SCONS -j $NCPU build=fast prefix=$BASEDIR install
+    } || return $?
+    ListSkipOrDo build "pyobjcryst" || {
+        cd $SRCDIR/pyobjcryst
+        $SCONS -j $NCPU prefix=$BASEDIR python=$PYTHON install
+    } || return $?
+    ListSkipOrDo build "libdiffpy" || {
+        cd $SRCDIR/libdiffpy
+        $SCONS -j $NCPU enable_objcryst=yes prefix=$BASEDIR install
+    } || return $?
+    ListSkipOrDo build "diffpy.srreal" || {
+        cd $SRCDIR/diffpy.srreal
+        $SCONS -j $NCPU prefix=$BASEDIR python=$PYTHON install
+    } || return $?
+    ListSkipOrDo build "diffpy.srfit" || {
+        python_easy_install -ZN --prefix=$BASEDIR ${SRCDIR}/diffpy.srfit
+    } || return $?
+    ListSkipOrDo build "srfit-sasview" || {
+        python_easy_install -ZN --prefix=$BASEDIR --exclude-scripts \
+            ${SRCDIR}/srfit-sasview/srfit-sasview-*.tar.gz(om[1])
+    } || return $?
+}
+
+
+install_pthfile() {
+    local TGTDIR=$(print -lr \
+        'import site, distutils.sysconfig' \
+        'if site.ENABLE_USER_SITE:  print site.USER_SITE' \
+        'else:  print distutils.sysconfig.get_python_lib()' \
+        | ${PYTHON} )
+    print
+    print "Python path directory for installing ${PTHFILE:t}"
+    vared -p '--> ' TGTDIR
+    TGTDIR=${TGTDIR%%[[:space:]]##}
+    expand_tilde TGTDIR
+    if [[ -z $TGTDIR ]]; then
+        print "No directory, installation cancelled."
+        exit 1
+    fi
+    if [[ ! -d $TGTDIR ]]; then
+        print "Directory $TGTDIR does not exist."
+        read -q '?Create? (y/n) '; print
+        if [[ $REPLY == [yY] ]]; then
+            mkdir -p ${TGTDIR} || exit $?
+        else
+            print "No directory, installation cancelled."
+            exit 1
+        fi
+    fi
+    if [[ ${PTHFILE} -ef ${TGTDIR}/${PTHFILE:t} && -L ${TGTDIR}/${PTHFILE:t} ]];
+    then
+        print "Symbolic link to ${PTHFILE:t} already exists, good!"
+    else
+        print "Creating symbolic link"
+        # On Linux "ln -si" gives zero exit status even if user declines to
+        # overwrite existing target.  Add test if symbolic link indeed works.
+        ln -siv ${PTHFILE} ${TGTDIR} &&
+            [[ ${PTHFILE} -ef ${TGTDIR}/${PTHFILE:t} ]] || exit $?
+    fi
+    print
+}
+
+
+install_scripts() {
+    local scriptfiles
+    scriptfiles=( ${BASEDIR}/bin/*(-*N) )
+    if [[ -z $scriptfiles ]]; then
+        return
+    fi
+    TGTDIR=${HOME}/bin
+    d=$(print -rD -- $TGTDIR)
+    print "Directory for installing executable scripts"
+    vared -p "--> " TGTDIR
+    TGTDIR=${TGTDIR%%[[:space:]]##}
+    expand_tilde TGTDIR
+    if [[ ! -d ${TGTDIR} ]]; then
+        print -D "Directory" $TGTDIR "does not exist, scripts not installed."
+        print
+        return
+    fi
+    # scrub scriptfiles that are already installed
+    scriptfiles=( ${^scriptfiles}(Ne,'[[ ! $REPLY -ef $TGTDIR/${REPLY:t} ]]',) )
+    if [[ -z ${scriptfiles} ]]; then
+        print "Scripts are already installed, good!"
+    else
+        print "Creating symbolic links:"
+        ln -siv $scriptfiles ${TGTDIR}
+    fi
+    d=( ${^path}(Ne:'[[ $REPLY -ef $TGTDIR ]]':) )
+    if [[ -z $d ]]; then
+        print -D "\nWARNING:" $TGTDIR "is not in the PATH."
+    fi
+    print
+}
+
+
+do_install() {
+    print $HASHLINE
+    print "Welcome to DiffPy-CMI ${VERSION?}"
+    print $HASHLINE
+    print
+    print "Use of this software is subject to the terms in LICENSE.txt."
+    do_license;
+    local libfiles
+    libfiles=( ${BASEDIR}/lib/*.(so|dylib)(N) )
+    if [[ ${#libfiles} -lt 2 ]]; then
+        print
+        print "Source only-distribution - we need to re-build all packages."
+        REPLY=Y
+        if [[ -z $opt_dryrun ]]; then
+            read -q '?Proceed? (y/n) '; print
+        fi
+        print
+        if [[ $REPLY != [yY] ]]; then
+            print "Installation cancelled."
+            exit 1
+        fi
+        expand_ranges build_selection all
+        do_build || {
+            print "\n$HASHLINE"
+            print "Build failure, installation cancelled."
+            print "$HASHLINE"
+            print
+            print "Check if all required software is installed and try again."
+            exit 2
+        }
+        if [[ -z ${opt_dryrun} ]]; then
+            print "\n$HASHLINE"
+            print "All packages built successfully."
+            print "$HASHLINE"
+        fi
+    fi
+    if [[ -n ${opt_dryrun} ]]; then
+        print "\n[dry run] - installation of symbolic links skipped."
+        exit
+    fi
+    install_pthfile
+    install_scripts
+    print $FINALINFO
+}
+
+# Main section here ----------------------------------------------------------
+
+if [[ -n ${opt_clean} ]]; then
+    expand_ranges clean_selection ${${opt_clean##--clean=#}:-all}
+    do_clean || exit $?
+fi
+
+if [[ -n ${opt_update} ]]; then
+    expand_ranges update_selection ${${opt_update##--update=#}:-all}
+    do_update || exit $?
+fi
+
+if [[ -n ${opt_build} ]]; then
+    expand_ranges build_selection ${${opt_build##--build=#}:-all}
+    do_build || exit $?
+fi
+
+if [[ -z "${opt_clean}${opt_update}${opt_build}" ]]; then
+    do_install
+fi
