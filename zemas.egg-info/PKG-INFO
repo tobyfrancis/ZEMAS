@@ -1,0 +1,16 @@
+Metadata-Version: 2.1
+Name: zemas
+Version: 0.0.1
+Summary: ZoNexus Electron Microscopy Acquisition Suite
+Home-page: https://github.com/tobyfrancisv/ZEMAS.git
+Author: Toby Francis
+Author-email: tobyfrancisv@gmail.com
+License: GPU
+Platform: UNKNOWN
+Classifier: Development Status :: 1 - Planning
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: GNU General Public License v3.0 (GPL3)
+Classifier: Programming Language :: Python :: 3
+
+UNKNOWN
+
