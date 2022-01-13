@@ -1,10 +1,10 @@
-# ZEMAS: ZoNexus Electron Microscopy Acquisition suite
+# ZEMAS: ZoNexus Electron Microscopy Acquisition Suite
 
-ZEMAS is an application for automated control and acquisition of various transmission electron microscopy (TEM) modalities using the ZoNexus 
+ZEMAS, the ZoNexus Electron Microscopy Accquisition Suite, is an application for automated control and acquisition of various transmission electron microscopy (TEM) modalities using ZoNexus stages.
 
 ## Installation
 
-Use the package manager [pip](https://pip.pypa.io/en/stable/) to install ZEMAS, and then run the application using either QT Creator or "python app.py".
+Use the package manager [pip](https://pip.pypa.io/en/stable/) to install ZEMAS, and then run the application using either QT Creator (suggested) or "python app.py".
 
 ```bash
 pip install zemas
