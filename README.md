@@ -1,10 +1,10 @@
 # ZEMAS: ZoNexus Electron Microscopy Acquisition Suite
 
-| ![](https://github.com/tobyfrancisv/ZEMAS/assets/Zonexus.png?raw=true) | ZEMAS, the ZoNexus Electron Microscopy Accquisition Suite, is an application for automated control and acquisition of various transmission electron microscopy (TEM) modalities using ZoNexus stages. |
+<img style="float: right;" src="https://github.com/tobyfrancis/ZEMAS/blob/main/assets/Zonexus.png">
+ 
+ZEMAS, the ZoNexus Electron Microscopy Accquisition Suite, is an application for automated control and acquisition of various transmission electron microscopy (TEM) modalities using ZoNexus stages.
 
-
-
-
+<img src="https://github.com/tobyfrancis/ZEMAS/blob/main/assets/zonexus1.png">
 
 ## Installation
 
@@ -15,4 +15,5 @@ pip install zemas
 ```
 
 ## License
-| ![](https://github.com/tobyfrancisv/ZEMAS/assets/zonexus1.png?raw=true) | [GPL3](https://www.gnu.org/licenses/gpl-3.0.en.html) |
+[GPL3](https://www.gnu.org/licenses/gpl-3.0.en.html)
+
