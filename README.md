@@ -5,11 +5,7 @@
  
 ## Installation
 
-Use the package manager [pip](https://pip.pypa.io/en/stable/) to install ZEMAS, and then run the application using either QT Creator (suggested) or "python app.py".
-
-```bash
-pip install zemas
-```
+Use the package manager [pip](https://pip.pypa.io/en/stable/) to install ZEMAS by first cloning the repository, entering the folder, then running "pip install . and then run the application using either QT Creator (suggested) or "python app.py".
 
 ## License
 [GPL3](https://www.gnu.org/licenses/gpl-3.0.en.html)
