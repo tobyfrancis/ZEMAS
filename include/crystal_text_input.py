@@ -3,12 +3,11 @@ from distutils.util import strtobool
 import re
 import cmath
 
-import keyboard
 import math
 import numpy as np
 import sys
 import textwrap
-import map
+from include import map
 
 
 #Define Variables that are input in Fortran
@@ -484,11 +483,15 @@ Specify maximum range of Miller Index. The typical value is 3  (avoid values > 4
         #AAA = REED('Acute angle between vectors ?')
         AAA = Acute_Angle_Between_Vectors
         #
+        
         # Assure that the ratio between the two reciprocal lattice vectors
         # is greater than one
         #
-        if RR < 1.0:
-            RR = 1.0/RR
+        try:
+            if RR < 1.0:
+                RR = 1.0/RR
+        except ValueError:
+            RR[RR < 1.0] = 1.0/RR[RR < 1.0]
 
         AA = (AAA * 2.0 * 3.14159) / 360.0
         

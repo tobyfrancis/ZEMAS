@@ -12,9 +12,13 @@ setup(
     author_email='tobyfrancisv@gmail.com',
     license='GPU',
     packages=find_packages(exclude=['data']),
-    install_requires=['PyQt6',
+    install_requires=['pyqt6',
+                      'pyqt6-tools',
                       'monty',
-                      'pymatgen'                     
+                      'pymatgen',
+                      'strictyaml',
+                      'opencv-python',
+                      'pybind11'                 
                       ],
 
     classifiers = [

@@ -2,13 +2,10 @@
 
 import numpy as np
 import math as ma
-import matplotlib.pyplot as plt
 import re
 from fractions import Fraction
 import math
 from scipy.optimize import fsolve
-
-
 
 class Constants(object):
     def __init__(self):
@@ -681,51 +678,6 @@ class Detector(object):
         #ZR(ang) maps [100] -> [cos sin 0] This is precisely how the absolute X axis looks on the screen.
         rm = ZR(ang)
         return np.dot(rm, vec)
-        
-    def plotRealAxes(self, mode, setting):
-        xaxis = np.array([1, 0, 0]);
-        yaxis = np.array([0, 1, 0]);
-        #Does the Z-axis go up the column or down the colunn ? This is to be determined from the way the tilts work. It determines which vector y is.
-        
-        rotx = self.absToDetector(xaxis, mode, setting)
-        roty = self.absToDetector(yaxis, mode, setting)
-        
-        fig, ax = plt.subplots(1)
-        
-        #plot the x-axis as seen on the screen
-        ax.arrow(0, 0, rotx[0], rotx[1], color = "red")
-        #plot the y-axis as seen on the screen
-        ax.arrow(0, 0, roty[0], roty[1], color = "green")
-        
-        sc = 1.1
-        wd = 0.005
-        #plot the x-axis as seen on the screen
-        ax.arrow(0, 0, sc*xaxis[0], sc*xaxis[1], width = wd, color = "black")
-        #plot the y-axis as seen on the screen
-        ax.arrow(0, 0, sc*yaxis[0], sc*yaxis[1], width = wd, color = "black")
-        
-        #Label the detector axes
-        sc2 = 1.2
-        ax.text(sc2*xaxis[0], sc2*xaxis[1], "X", color = "black")
-        ax.text(sc2*yaxis[0], sc2*yaxis[1], "Y", color = "black")
-
-        plt.gca().set_aspect('equal', adjustable='box')
-        
-        #Label the tilt axes
-        sc = 1.1
-        ax.text(sc*rotx[0], sc*rotx[1], r"$\alpha$", color = "red")
-        ax.text(sc*roty[0], sc*roty[1], r"$\beta$", color = "green")
-        
-        #turn off labels of axes
-        ax.set_yticklabels([])
-        ax.set_xticklabels([])
-        
-        sc2 = 1.3
-        ax.set_xlim([-sc2, sc2])
-        #this reverses the y-axis
-        ax.set_ylim([sc2, -sc2])
-        
-        plt.show()
     
 class Structure(object):
     """The structure class contains all the crystallographic data and calculations. The Crystal class can inherit from this class."""
@@ -1551,118 +1503,6 @@ class Crystal(object):
             
     def getVectorAngle(self, vec1, vec2, typ="real", units = "radians"):
         return self.structure.getVectorAngle(vec1, vec2, typ=typ, units = units)
-        
-    def plotCrystalonDetector(self, detector, mode, setting, vecincl = [], typ="real", plotaxes = True, verbose=False, plotbond = True, hkm = 3):
-        #d001 = self.getSym(miller(1, 0, 0), typ=typ)
-        #d111 = self.getSym(miller(1, 1, 1), typ=typ)
-        #d011 = self.getSym(miller(1, 1, 0), typ=typ)
-        #toplotd001 = self.millerToDetector(d001, detector, mode, setting, typ=typ, verbose=verbose)
-        #toplotd111 = self.millerToDetector(d111, detector, mode, setting, typ=typ, verbose=verbose)
-        #toplotd011 = self.millerToDetector(d011, detector, mode, setting, typ=typ, verbose=verbose)
-        
-        vecincl = getHKLlistNoMultipes(maxind = hkm).T.tolist()
-        
-        millers = []
-        tp = []
-        for i in vecincl:
-            i = np.array(i)
-            mil = self.getSym(i, typ = typ)
-            millers.append(mil)
-            toplot = self.millerToDetector(mil, detector, mode, setting, typ=typ, verbose=verbose)
-            tp.append(toplot)
-        
-        #print(millers)
-        #print(tp)
-        
-        #change the type of brackets based on the typ passed
-        brc = []
-        if typ == "real":
-            brc = ["[", "]"]
-        elif typ== "recyprocal":
-            brc = ["(", ")"]
-            
-        #make the actual plot
-        fig, ax = plt.subplots(figsize = (7, 6))
-        stereographicCanvas(ax)
-        
-        #plotStereographic(d001, d001, ax, verbose = verbose, s=100, c="b")
-        #plotStereographic(d111, d111, ax, verbose = verbose, s=100, c="b")
-        #plotStereographic(d011, d011, ax, verbose = verbose, s=100, c="g")
-        
-        if plotbond: #plot the boundaries also
-            detail = 10
-            
-            ##first construct arrays of angles
-            amx=self.stage.getAlphaMax()
-            amn = self.stage.getAlphaMin()
-            bmx = self.stage.getBetaMax()
-            bmn = self.stage.getBetaMin()
-            
-            aar = np.linspace(amn, amx, detail).tolist()
-            bar = np.linspace(bmn, bmx, detail).tolist()
-            
-            #Turn the angles into millers and construct it in the right way as to have 4 lines
-            l1 = [] #the amin line
-            l2 = [] #the amax line
-            for i in aar:
-                l1.append(self.getZoneAtAlphaBeta(i, bmn, typ = typ, integer = False))
-                l2.append(self.getZoneAtAlphaBeta(i, bmx, typ = typ, integer = False))
-                
-            l3 = [] #the amin line
-            l4 = [] #the amax line
-            for i in bar:
-                l3.append(self.getZoneAtAlphaBeta(amn, i, typ = typ, integer = False))
-                l4.append(self.getZoneAtAlphaBeta(amx, i, typ = typ, integer = False))
-            
-            l1 = np.array(l1).T
-            l2 = np.array(l2).T
-            l3 = np.array(l3).T
-            l4 = np.array(l4).T
-            
-            #Turn the millers into detector vectors
-            tpl1 = self.millerToDetector(l1, detector, mode, setting, typ=typ, verbose=verbose)
-            tpl2 = self.millerToDetector(l2, detector, mode, setting, typ=typ, verbose=verbose)
-            tpl3 = self.millerToDetector(l3, detector, mode, setting, typ=typ, verbose=verbose)
-            tpl4 = self.millerToDetector(l4, detector, mode, setting, typ=typ, verbose=verbose)
-            
-            #plotstereographic but editted
-            plotLineStereographic(tpl1, ax)
-            plotLineStereographic(tpl2, ax)
-            plotLineStereographic(tpl3, ax)
-            plotLineStereographic(tpl4, ax)
-        
-        if plotaxes:
-            xaxis = np.array([1, 0, 0]);
-            yaxis = np.array([0, 1, 0]);
-            #Does the Z-axis go up the column or down the colunn ? This is to be determined from the way the tilts work. It determines which vector y is.
-            
-            dec = self.stage.getTEM().getDetector(detector) #find the detector
-            rotx = dec.absToDetector(xaxis, mode, setting)
-            roty = dec.absToDetector(yaxis, mode, setting)
-            
-            sc = 1.1
-            wd = 0.005
-            #plot the x-axis as seen on the screen
-            ax.arrow(0, 0, sc*rotx[0], sc*rotx[1],  width = wd, color = "red")
-            #plot the y-axis as seen on the screen
-            ax.arrow(0, 0, sc*roty[0], sc*roty[1],  width = wd, color = "green")
-            
-            #Label the axes
-            sc2 = 1.35
-            ax.text(sc2*rotx[0], sc2*rotx[1], r"$\alpha$", color = "red", fontsize=14)
-            ax.text(sc2*roty[0], sc2*roty[1], r"$\beta$", color = "green", fontsize=14)
-        
-        #plotStereographic(toplotd001, d001, ax, verbose = verbose, brc = brc, s=100, c="r")
-        #plotStereographic(toplotd111, d111, ax, verbose = verbose, brc = brc, s=100, c="b")
-        #plotStereographic(toplotd011, d011, ax, verbose = verbose, brc = brc, s=100, c="g")
-        
-        for i, j in enumerate(millers):
-            plotStereographic(tp[i], j, ax, verbose = verbose, brc = brc)
-        
-        plt.tight_layout()
-        
-        return fig, ax
-        #plt.show()
 
 def getSym(vec, unc = 1e-9):
         """Returns all the possible permutations of miller indices/vectors as columns in a matrix. Only returns the vectors that are crystallographically identical if checksame is set True. Real and recyprocal vectors are both valid"""
@@ -1842,62 +1682,5 @@ def toAllCols(func, lstvc, **kwargs):
     else:
         print("This input format is not of the correct dimension")
         return lstvc
-        
-def stereographicCanvas(ax):
-    """The canvas is set up for stereographic projection"""
-    #plot the unit circle
-    deg = np.linspace(0, 2*np.pi, 100)
-    xcirc = np.cos(deg)
-    ycirc = np.sin(deg)
-    ax.plot(xcirc, ycirc, c="black")
-    #plot the lines of the axes
-    ax.plot(np.array([0, 0]), np.array([-1, 1]), c="black")
-    ax.plot(np.array([-1, 1]), np.array([0, 0]), c="black")
-    
-    #axes settings
-    xyscale = 1.5
-    ax.set_xlim([-xyscale, xyscale])
-    ax.set_ylim([xyscale, -xyscale])
-    
-    #Plot the detector X and Y axes
-    xaxis = np.array([1, 0, 0]);
-    yaxis = np.array([0, 1, 0]);
-    
-    sc = 1.1
-    wd = 0.005
-    #plot the x-axis as seen on the screen
-    ax.arrow(0, 0, sc*xaxis[0], sc*xaxis[1], width = wd, color = "black")
-    #plot the y-axis as seen on the screen
-    ax.arrow(0, 0, sc*yaxis[0], sc*yaxis[1], width = wd, color = "black")
-    
-    #Label the axes
-    sc2 = 1.35
-    ax.text(sc2*xaxis[0], sc2*xaxis[1], "X", color = "black")
-    ax.text(sc2*yaxis[0], sc2*yaxis[1], "Y", color = "black")
-
-    plt.axis("off")
-    plt.gca().set_aspect('equal', adjustable='box')
-    plt.draw()
-
-def plotStereographic(vecs, labs, ax, verbose=False, brc = ["[", "]"],  **kwargs):
-    """The annotated poles of certain vectors are plotted in the stereogram. Vecs should be the vectors after any transformation/rotation"""
-    projpospos, projpos, projnegpos, projneg  = calcStereo(vecs)
-    if verbose:
-        print("The coordinates that will be plot:")
-        print(projpos)
-    labs = labs[:, projpospos]
-    x = projpos[0, :].T
-    y = projpos[1, :].T
-    #make the size of the pieces inversely proportional to their multiplicity
-    mult = vecs.shape[1]
-    for i, xy in enumerate(zip(x, y)):
-        ax.annotate("%s" %(str(labs[:,i].T).replace("[[", brc[0]).replace("]]", brc[1])).replace(".", "").replace("-0", "0"), xy=xy, textcoords = "data")
-    ax.scatter([x],[y], s = 100*12/mult, **kwargs)
-
-def plotLineStereographic(vecs, ax, **kwargs):
-    """A line is plotted in the stereographic projection"""
-    projpospos, projpos, projnegpos, projneg  = calcStereo(vecs)
-    x = np.array(projpos[0, :])[0]
-    y = np.array(projpos[1, :])[0]
-    ax.plot(x,y, color = "black", **kwargs)           
+                 
         

@@ -1,25 +1,11 @@
 import cv2
 import numpy as np
 import os
-import matplotlib.pyplot as plt
-
-from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
-from matplotlib.figure import Figure
-from matplotlib import patches
 import math
-
 import pandas as pd
 
-
-
-filepath = r'June10_2021_STO\June10_2021_STO\SAED'
-directory = os.listdir(filepath)
-
-
-def FindCenterOfDiffractionPattern(filepath,filename):
-    temp=filepath+'\\' + filename
-    im = cv2.imread(temp, cv2.IMREAD_GRAYSCALE)
-    imr = im.ravel()
+def FindCenterOfDiffractionPattern(image):
+    imr = image.ravel()
     th = np.mean(imr)
     #print (th , ' is the mean value of the image')
     for ii in range(10):
@@ -41,22 +27,20 @@ def FindCenterOfDiffractionPattern(filepath,filename):
            #print (th)
 
 
-    im_th = im.copy()
-    im_th[im >= th2] = 1
-    im_th[im < th2] = 0
+    im_th = image.copy()
+    im_th[image >= th2] = 1
+    im_th[image < th2] = 0
 
     # Find the center of mass
     mn = im_th.sum()
 
-    XX, YY = np.mgrid[0:im.shape[0], 0:im.shape[1]]
+    XX, YY = np.mgrid[0:image.shape[0], 0:image.shape[1]]
     cx = np.sum(XX * im_th)/mn
     cy = np.sum(YY * im_th)/mn
- 
 
     x=cx
     y=cy
     
-
     return x,y
 
 def compare(center, keypoint):   #return a quadrant number: 1, 2, 3, or 4, 0 means unidentified
@@ -113,12 +97,7 @@ def all_values(obj):
     #print("obj.%s = %r" % (attr, getattr(obj, attr)))
     temp=1
 
-def GetDiffractionSpotProperties(filepath,filename):
-    temp=filepath+'\\' + filename
-    # Read image
-    im = cv2.imread(temp, cv2.IMREAD_GRAYSCALE)
-
-    
+def GetDiffractionSpotProperties(im):
     im=cv2.bitwise_not(im)
     params = cv2.SimpleBlobDetector_Params()
     params.filterByArea = True
@@ -139,11 +118,8 @@ def GetDiffractionSpotProperties(filepath,filename):
     # get distances between blobs
     distances=[]
     j=0
-   
     
-    
-    
-    com_x, com_y = FindCenterOfDiffractionPattern(filepath,filename)
+    com_x, com_y = FindCenterOfDiffractionPattern(im)
     center = (int(com_x), int(com_y))
     #print('Center' , center)
     #im_with_keypoints =cv2.circle(im_with_keypoints, center, 10, (255, 0, 0), 1)  #image, center, radius, color, thickness with -1 for fillin  #FOR COM Center-of-mass
@@ -280,50 +256,6 @@ def GetDiffractionSpotProperties(filepath,filename):
     #print (count_distances , ' is the number of measured distances')
 
     if len(distances) > 0:
-    #print(type(distances))
-        plt.subplot(2, 3, 1)
-        plt.imshow(im_with_keypoints)
-        plt.xlabel(filename.replace('.png',''))
-        plt.subplot(2, 3, 2)
-        #plt.scatter(range(count_distances), distances)
-        #plt.gca().set_ylim(bottom=0)
-        plt.scatter(y=angles_from_center, x=distances_from_center)
-        plt.xlabel('Distances from center')
-        plt.ylabel('Angles from center')
-        plt.gca().set_ylim(bottom=0)  #-180 
-        plt.gca().set_ylim(top=360)  # 180 
-        plt.subplot(2, 3, 3)
-        plt.hist(distances, density=False, bins=max(2,int(max(distances))))  # density=False would make counts
-        plt.ylabel('Count')
-        plt.xlabel('Distance')
-        plt.subplot(2, 3, 3) # if you change to plt.subplot(2, 2, 3), the subplots will overlay
-        plt.hist(distances_from_center, density=False, bins=max(2,int(max(distances))))  # density=False would make counts
-        plt.ylabel('Count')
-        plt.xlabel('Distance betw. points / from center')
-        plt.subplot(2, 3, 4) # if you change to plt.subplot(2, 2, 3), the subplots will overlay
-        plt.hist(angles_from_a_key_point, density=False, bins=max(2,int(max(angles_from_a_key_point))))  # density=False would make counts
-        plt.ylabel('Count')
-        plt.xlabel('Angles from one point to all others (degrees)')
-        plt.xlabel('Angle (deg)')
-        plt.subplot(2, 3, 5)
-        plt.scatter(y=spot_intensity,x=distances_from_center)
-        plt.xlabel('distance from center' )
-        plt.ylabel('diffracted beam intensity')
-
-        
-        #plt.scatter(range(len(angles_from_a_key_point)), angles_from_a_key_point)
-        #plt.gca().set_ylim(bottom=0)
-        #plt.ylabel('Angle')
-        #plt.xlabel('Index (no meaning)')
-        plt.subplot(2, 3, 6)
-        #plt.bar([1,2], [tilt_top_left,tilt_top_right])
-        #plt.xlabel('Alpha is towards top left, Beta is towards top right')
-        plt.pie([quad1intensity, quad2intensity,quad3intensity,quad4intensity], explode=None, labels=['bottom left', 'top left',' bottom right', 'top right'])
-        #plt.show()
-        plt.subplot(1, 1, 1)
-        plt.imshow(im_with_keypoints)
-        plt.xlabel(filename.replace('.png',''))
-        #plt.show()
 
         df=pd.DataFrame()
         df['Angle']=angles_from_center
@@ -333,55 +265,40 @@ def GetDiffractionSpotProperties(filepath,filename):
 
         return df, im_with_keypoints
 
-def GetAngleANdDHKLDistances(df):
+def GetAngleAndHKLDistances(df):  
+    if df is not None:
+        #print(df.shape[0])
+        temp=df.shape[0]
         
-        if df is not None:
-            #print(df.shape[0])
-            temp=df.shape[0]
+        df2=pd.DataFrame()
+        k=0
+        Spot1 =[]
+        Spot2 =[]
+        A=[]
+        B=[]
+        C=[]
+        for i in range(temp):
             
-            df2=pd.DataFrame()
-            k=0
-            Spot1 =[]
-            Spot2 =[]
-            A=[]
-            B=[]
-            C=[]
-            for i in range(temp):
-                
-                for j in range(i+1,temp):
-                    k=+1
-                    angle_betw_two_vectors = df['Angle'].values[j]-df['Angle'].values[i]
-                    angle_betw_two_vectors=abs(angle_betw_two_vectors)
-                    if angle_betw_two_vectors < 90:
-                        Spot1.append(i)
-                        Spot2.append(j)
-                        A.append(angle_betw_two_vectors)
-                        B.append(df['Distance'].values[i])
-                        C.append(df['Distance'].values[j])
+            for j in range(i+1,temp):
+                k=+1
+                angle_betw_two_vectors = df['Angle'].values[j]-df['Angle'].values[i]
+                angle_betw_two_vectors=abs(angle_betw_two_vectors)
+                if angle_betw_two_vectors < 90:
+                    Spot1.append(i)
+                    Spot2.append(j)
+                    A.append(angle_betw_two_vectors)
+                    B.append(df['Distance'].values[i])
+                    C.append(df['Distance'].values[j])
 
-            df2['Spot 1'] = Spot1
-            df2['Spot 2'] = Spot2
-            df2['Angle'] = A
-            df2['Vector 1 1/dhkl'] = B
-            df2['Vector 2 1/dhkl'] = C
-            #print(df2)
-            return df2
-        else:
-            print('No acute angles')
-
-
-
-directory=directory[25:27]
-#print(directory)
-for filename in directory:
-    
-    if ' ' in filename:
-        continue
-    if '.png' in filename:
-        
-        df=GetDiffractionSpotProperties(filepath,filename)
-        df2 = GetAngleANdDHKLDistances(df)
-        df2=df2[df2['Angle']>10]
+        df2['Spot 1'] = Spot1
+        df2['Spot 2'] = Spot2
+        df2['Angle'] = A
+        df2['Vector 1 1/dhkl'] = B
+        df2['Vector 2 1/dhkl'] = C
+        #print(df2)
+        return df2
+    else:
+        print('No acute angles')
         
 
 
