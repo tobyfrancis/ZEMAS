@@ -79,9 +79,10 @@ class ZEMAS(QMainWindow):
                 self.currentImage.setPixmap(QtGui.QPixmap.fromImage(qt_image))
 
     def calc_zone_axis(self):
-        self.image_analyzer.set_image(self.current_image)
-        self.threadpool.start(self.image_analyzer)
-        self.image_analyzer.signals.finished.connect(self.set_hkl)
+        if self.image_analyzer.image != self.current_image:
+            self.image_analyzer.set_image(self.current_image)
+            self.threadpool.start(self.image_analyzer)
+            self.image_analyzer.signals.finished.connect(self.set_hkl)
 
     def set_hkl(self):
         self.hBox1.setValue(self.image_analyzer.hkl[0])
