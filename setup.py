@@ -14,6 +14,8 @@ setup(
     packages=find_packages(exclude=['data']),
     install_requires=['pyqt6',
                       'pyqt6-tools',
+                      'numpy',
+                      'scipy',
                       'monty',
                       'pymatgen',
                       'strictyaml',

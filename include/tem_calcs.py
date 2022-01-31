@@ -946,8 +946,6 @@ class Structure(object):
         return match1.T.tolist(), matchl1[0].tolist(), match2.T.tolist(), matchl2[0].tolist(), matchangls.tolist(), zones.T.tolist()
         
         
-
-        
 class Crystal(object):
     
     def __init__(self, name, stage, structurename, comment = ""):

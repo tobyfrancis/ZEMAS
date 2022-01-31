@@ -21,7 +21,7 @@ from warnings import warn
 
 import numpy as np
 import requests
-from CifFile import ReadCif, get_number_with_esd
+from include.CifFile import ReadCif, get_number_with_esd
 from numpy.linalg import inv
 
 from . import __version__

@@ -10,7 +10,7 @@ from contextlib import AbstractContextManager, redirect_stdout
 from io import StringIO
 
 import numpy as np
-from CifFile import CifBlock, CifFile
+from include.CifFile import CifBlock, CifFile
 
 from . import __version__
 
