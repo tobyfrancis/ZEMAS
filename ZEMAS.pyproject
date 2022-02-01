@@ -1,3 +1,3 @@
 {
-    "files": ["app.py","worker.py","form.ui","style.qss","microscope.py"]
+    "files": ["zemas.py","form.ui","style.qss"]
 }
