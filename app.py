@@ -170,7 +170,7 @@ class ZEMAS(QMainWindow):
         self.alpha = alpha
         self.beta  = beta
 
-if __name__ == "__main__":
+def run_zemas():
     #Initialize QT application
     app = QApplication([])
     #Set application icon
@@ -188,7 +188,11 @@ if __name__ == "__main__":
     #start the main ZEMAS widget, subclassed from QMainWindow
     widget = ZEMAS()
     widget.setWindowTitle("ZEMAS")
+    widget.setWindowIcon(QtGui.QIcon('assets/zonexus.png'))
     #show widget (using show function from QMainWindow)
     widget.show()
     #exit application
     sys.exit(app.exec())
+
+if __name__ == "__main__":
+    run_zemas()
