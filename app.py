@@ -8,7 +8,7 @@ import numpy as np
 import cv2, imutils
 
 from include.dm3_lib import DM3
-from include.crystals.crystal import CIFParser
+from include.crystals.parsers import CIFParser
 from include.workers import *
 
 from PyQt6 import QtGui, uic

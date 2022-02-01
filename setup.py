@@ -20,8 +20,7 @@ setup(
                       'pymatgen',
                       'strictyaml',
                       'opencv-python',
-                      'imutils',
-                      'spglib'
+                      'imutils'
                       ],
 
     classifiers = [
