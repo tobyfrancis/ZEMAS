@@ -20,7 +20,7 @@ setup(
                       'pymatgen',
                       'strictyaml',
                       'opencv-python',
-                      'pybind11'                 
+                      'imutils'                 
                       ],
 
     classifiers = [
