@@ -10,7 +10,7 @@ setup(
     url='https://github.com/tobyfrancisv/ZEMAS.git',
     author='Toby Francis',
     author_email='tobyfrancisv@gmail.com',
-    license='GPU',
+    license='GPL',
     packages=find_packages(exclude=['data']),
     install_requires=['pyqt6',
                       'pyqt6-tools',
@@ -20,7 +20,8 @@ setup(
                       'pymatgen',
                       'strictyaml',
                       'opencv-python',
-                      'imutils'                 
+                      'imutils',
+                      'spglib'
                       ],
 
     classifiers = [
